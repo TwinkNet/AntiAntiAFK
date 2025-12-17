@@ -1,0 +1,6 @@
+name: AntiAntiAFK
+author: TwinkNet
+version: '1.0.0'
+main: network.twink.antiantiafk.AntiAntiAfkPlugin
+api-version: '1.21'
+folia-supported: true
