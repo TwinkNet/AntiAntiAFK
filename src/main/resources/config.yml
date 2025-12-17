@@ -1,0 +1,13 @@
+bypass-permission: "antiantiafk.bypass"
+initial-seconds: 1800.0
+events:
+  new-chunk-generated: 0.4
+  old-chunk-loaded: 0.1
+  block-placed: 0.8
+  block-broken: 0.4
+  dimension-changed: 1.0
+  container-opened: 0.3
+  elytra-used: 0.4
+  player-died: 0.2
+  player-chatted: 0.0
+  player-right-click: 0.2
