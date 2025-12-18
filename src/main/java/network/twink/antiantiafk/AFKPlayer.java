@@ -1,107 +1,203 @@
 package network.twink.antiantiafk;
 
+import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import io.papermc.paper.event.packet.PlayerChunkLoadEvent;
-import io.papermc.paper.math.BlockPosition;
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
+import network.twink.antiantiafk.util.BlockPos;
 import org.bukkit.Location;
-import org.bukkit.block.Chest;
 import org.bukkit.block.Container;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.player.PlayerExpChangeEvent;
-import org.bukkit.event.player.PlayerHarvestBlockEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class AFKPlayer implements Listener {
 
-    private AntiAntiAfkPlugin plugin;
+    private final UUID playerUuid;
+    private final AntiAntiAfkPlugin plugin;
     private final Thread timerDecreaseThread;
     private float secondsBeforeDisconnect;
-    private List<BlockPos> blockPositions;
-    private List<Long> chunkKeys;
+    private final ArrayDeque<BlockPos> blockPositions;
+    private final ArrayDeque<Long> chunkKeys;
 
-    public AFKPlayer(AntiAntiAfkPlugin plugin, float initialSeconds) {
+    public AFKPlayer(AntiAntiAfkPlugin plugin, UUID playerUuid, float initialSeconds) {
         this.plugin = plugin;
+        this.playerUuid = playerUuid;
         if (this.plugin == null) {
             throw new IllegalArgumentException("Unexpected value passed for AntiAntiAfkPlugin plugin: cannot be null");
         }
-        this.blockPositions = new ArrayList<>();
-        this.chunkKeys = new ArrayList<>();
+        if (this.playerUuid == null) {
+            throw new IllegalArgumentException("Unexpected value passed for UUID playerUuid: cannot be null");
+        }
+        this.blockPositions = new ArrayDeque<>();
+        this.chunkKeys = new ArrayDeque<>();
         this.secondsBeforeDisconnect = initialSeconds;
         Runnable timer = () -> {
-            while(getSecondsBeforeDisconnect() > 0) {
+            while (getSecondsBeforeDisconnect() > 0) {
+                if (this.getBukkitPlayer() == null || !this.getBukkitPlayer().isOnline()) return;
                 secondsBeforeDisconnect -= 1f;
+                if (plugin.getWeightedEvents().isDebug()) {
+                    getBukkitPlayer().sendPlayerListHeaderAndFooter(Component.text("\n\2474Anti-AntiAFK Debug\n"),
+                            Component.text("\n\2477" + AntiAntiAfkPlugin.getFormattedTime(getSecondsBeforeDisconnect()) + "\n"));
+                }
                 try {
-                    wait(1000);
+                    synchronized (this) {
+                        wait(1000);
+                    }
                 } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    this.plugin.getLogger().info(playerUuid + "'s timerDecreaseThread was interrupted. Maybe they are being kicked for inactivity? Maybe the server is shutting down or being reloaded?");
                 }
             }
-
+            kickPlayer();
         };
         this.timerDecreaseThread = new Thread(timer);
+        this.timerDecreaseThread.start();
     }
 
-    @EventHandler
+    public Player getBukkitPlayer() {
+        return this.plugin.getServer().getPlayer(playerUuid);
+    }
+
+    public void interruptThread() {
+        if (!this.timerDecreaseThread.isInterrupted()) this.timerDecreaseThread.interrupt();
+    }
+
+    public void kickPlayer() {
+        this.interruptThread();
+        if (this.getBukkitPlayer() == null || !this.getBukkitPlayer().isOnline()) return; // they're already gone.
+        this.getBukkitPlayer().kick(); // todo kickmsg
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onChunkGen(PlayerChunkLoadEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
         if (e.getPlayer().hasPermission("antiantiafk.bypass")) {
             return;
         }
         if (!e.getChunk().isGenerated()) {
             addSecondsBeforeDisconnect(plugin.getWeightedEvents().getOnNewChunkGenerated());
-            chunkKeys.add(e.getChunk().getChunkKey());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
         } else if (!chunkKeys.contains(e.getChunk().getChunkKey())) {
             addSecondsBeforeDisconnect(plugin.getWeightedEvents().getOldChunkLoaded());
-            chunkKeys.add(e.getChunk().getChunkKey());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
         } else {
-            // do we do anything? to be determined...
+            // we don't want to punish a live player for doing repetitive things, like going back and forth between two structures in their base.
+            // this may need tuning.
+            addSecondsBeforeDisconnect(plugin.getWeightedEvents().getSeenChunkLoaded());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
             return;
         }
     }
 
-    @EventHandler
-    public void onPlayerBlockBreak(PlayerHarvestBlockEvent event) {
-        Location loc = event.getHarvestedBlock().getLocation();
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerBlockBreak(PlayerHarvestBlockEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        Location loc = e.getHarvestedBlock().getLocation();
         BlockPos pos = new BlockPos(loc);
         if (!blockPositions.contains(pos)) {
-            blockPositions.add(new BlockPos(loc));
             addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnBlockBreak());
+            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
         }
-        // we are not going to give the player more time for placing a block in the same location that they've already done something in.
     }
-    @EventHandler
-    public void onPlayerBlockBreak(BlockPlaceEvent event) {
-        Location loc = event.getBlockPlaced().getLocation();
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerBlockPlace(BlockPlaceEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        Location loc = e.getBlockPlaced().getLocation();
         BlockPos pos = new BlockPos(loc);
         if (!blockPositions.contains(pos)) {
-            blockPositions.add(new BlockPos(loc));
             addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnBlockPlace());
+            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
         }
-        // we are not going to give the player more time for placing a block in the same location that they've already done something in.
     }
-    @EventHandler
+
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerContainerOpen(InventoryOpenEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
         if (e.getInventory().getHolder() instanceof Container container) {
             BlockPos pos = new BlockPos(container.getLocation());
             if (!blockPositions.contains(pos)) {
                 addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnContainerOpen());
+                enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
             }
             // do we do anything? to be determined... containers don't normally move around often
+            // maybe we should give the player some time under certain circumstances.
+            // still thinking about how this will work.
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onDeath(PlayerDeathEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        BlockPos pos = new BlockPos(e.getPlayer().getLocation());
+        if (!blockPositions.contains(pos)) {
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnDeath());
+            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onFly(EntityToggleGlideEvent e) {
+        if (e.getEntity() instanceof Player player) {
+            if (!player.getUniqueId().equals(playerUuid)) return;
+            BlockPos pos = new BlockPos(player.getLocation());
+            if (!blockPositions.contains(pos)) {
+                addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnElytraEngage());
+                enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onFlyFaster(PlayerElytraBoostEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnElytraBoost());
+    }
+
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerChat(AsyncChatEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnChat());
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPortal(PlayerPortalEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        BlockPos pos = new BlockPos(e.getPlayer().getLocation());
+        if (!blockPositions.contains(pos)) {
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnPortal());
+            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
         }
     }
 
     public float addSecondsBeforeDisconnect(float additionalSeconds) {
         this.secondsBeforeDisconnect += additionalSeconds;
+        this.secondsBeforeDisconnect = Math.min(this.secondsBeforeDisconnect, this.plugin.getWeightedEvents().getMaximumSeconds());
         return secondsBeforeDisconnect;
     }
 
     public float getSecondsBeforeDisconnect() {
         return secondsBeforeDisconnect;
+    }
+
+    private void enqueueChunkKey(long chunkKey, int maxEntries) {
+        boolean full = this.chunkKeys.size() >= maxEntries;
+        chunkKeys.offer(chunkKey);
+        if (full) chunkKeys.poll();
+    }
+
+    private void enqueueBlockPos(BlockPos pos, int maxEntries) {
+        boolean full = this.blockPositions.size() >= maxEntries;
+        blockPositions.offer(pos);
+        if (full) blockPositions.poll();
     }
 }

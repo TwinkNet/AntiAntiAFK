@@ -1,4 +1,4 @@
-package network.twink.antiantiafk;
+package network.twink.antiantiafk.util;
 
 import org.bukkit.Location;
 

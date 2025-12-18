@@ -1,13 +1,20 @@
 package network.twink.antiantiafk;
 
+import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import io.papermc.paper.event.packet.PlayerChunkLoadEvent;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,8 +22,6 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
-
-    public static final String BYPASS_PERMISSION = "antiantiafk.bypass";
 
     public Logger logger;
     private Map<UUID, AFKPlayer> uuidafkPlayerMap;
@@ -27,11 +32,14 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
         logger = this.getLogger();
         logger.info("Anti-AntiAFK is initialising");
         weightedEvents = new ConfigurableWeightedEvents(this);
+        logger.info("Anti-AntiAFK has loaded its configuration values");
         uuidafkPlayerMap = new HashMap<>();
         for (Player onlinePlayer : this.getServer().getOnlinePlayers()) {
-            uuidafkPlayerMap.put(onlinePlayer.getUniqueId(), new AFKPlayer(this, 1800f)); // add current players, needed if server is reloaded with people online.
+            uuidafkPlayerMap.put(onlinePlayer.getUniqueId(), new AFKPlayer(this, onlinePlayer.getUniqueId(), 1800f)); // add current players, needed if server is reloaded with people online.
+            logger.info(onlinePlayer.getName() + " was already online, but they will be treated as if they just joined. A new AFKPlayer instance was created for them.");
         }
         this.getServer().getPluginManager().registerEvents(this, this);
+        logger.info("Anti-AntiAFK is ready and listening for events.");
     }
 
     /* pkg-priv */ AFKPlayer getAfkPlayer(Player player) {
@@ -40,12 +48,16 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
+        logger.info("Shutting down Anti-AntiAFK");
+        uuidafkPlayerMap.forEach(((uuid, afkPlayer) -> {
+            afkPlayer.interruptThread();
+            logger.info("Interrupting the timer thread for AFKPlayer " + uuid.toString());
+        }));
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        AFKPlayer afkPlayer = new AFKPlayer(this, 1800f);
+        AFKPlayer afkPlayer = new AFKPlayer(this, e.getPlayer().getUniqueId(), 1800f);
         uuidafkPlayerMap.put(e.getPlayer().getUniqueId(), afkPlayer);
         this.getServer().getPluginManager().registerEvents(afkPlayer, this);
     }
@@ -53,9 +65,34 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onLeave(PlayerQuitEvent e) {
         var afkPlayer = getAfkPlayer(e.getPlayer());
+        afkPlayer.interruptThread();
         // All events used in AFKPlayer are going to have to be listed here.
         // This is a bit annoying, and I'm not seeing a better way to do this without doing hacky crap.
         PlayerChunkLoadEvent.getHandlerList().unregister(afkPlayer);
+        PlayerHarvestBlockEvent.getHandlerList().unregister(afkPlayer);
+        BlockPlaceEvent.getHandlerList().unregister(afkPlayer);
+        InventoryOpenEvent.getHandlerList().unregister(afkPlayer);
+        PlayerDeathEvent.getHandlerList().unregister(afkPlayer);
+        EntityToggleGlideEvent.getHandlerList().unregister(afkPlayer);
+        PlayerElytraBoostEvent.getHandlerList().unregister(afkPlayer);
+        AsyncChatEvent.getHandlerList().unregister(afkPlayer);
+    }
+
+    public static String getFormattedTime(float seconds) {
+        int roundedDown = (int) seconds;
+        StringBuilder builder = new StringBuilder();
+        int hours = 0;
+        int minutes = 0;
+        int sec = 0;
+        for (; roundedDown > 3600; roundedDown -= 3600) {
+            hours++;
+        }
+        for (; roundedDown > 60; roundedDown -= 60) {
+            minutes++;
+        }
+        sec = roundedDown;
+        builder.append(hours).append("h ").append(minutes).append("m ").append(sec).append("s");
+        return builder.toString();
     }
 
     public ConfigurableWeightedEvents getWeightedEvents() {
