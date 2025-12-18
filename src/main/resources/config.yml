@@ -1,17 +1,18 @@
 bypass-permission: "antiantiafk.bypass"
-initial-seconds: 1800.0 # This is the amount of seconds a player starts off with when they log in.
-maximum-seconds: 2100.0 # This is the maximum amount of seconds a player can accumulate.
-debug: false # Overrides the playerlist header and footer with debug info, including how much longer you have before getting kicked.
+kick-message: "§6You have been disconnected from the server"
+initial-seconds: 60.0 # This is the amount of seconds a player starts off with when they log in.
+maximum-seconds: 360.0 # This is the maximum amount of seconds a player can accumulate.
+debug: true # Overrides the playerlist header and footer with debug info, including how much longer you have before getting kicked.
 events:
-  new-chunk-generated: 1.0 # The player has generated a brand-new chunk on the server
-  old-chunk-loaded: 0.5 # The player has loaded an existing chunk on the server that they haven't seen in the last chunkkey-max-entries chunks.
-  seen-chunk-loaded: 0.05 # The player has loaded a chunk that they've already loaded once in their last chunkkey-max-entries loaded chunks
+  new-chunk-generated: 0.5 # The player has generated a brand-new chunk on the server
+  old-chunk-loaded: 0.3 # The player has loaded an existing chunk on the server that they haven't seen in the last chunkkey-max-entries chunks.
+  seen-chunk-loaded: 0.018 # The player has loaded a chunk column that they've already loaded once in their last chunkkey-max-entries loaded chunks
   # If a player is traveling straight, every 16 blocks traveled, they will generate or load the same amount of chunks as whatever your server render distance is set to.
   # If they are traveling at a 45-degree angle (perfectly diagonal), every 16 blocks traveled, they will generate your render distance multiplied by two.
-  # These values must be tuned to how your server is configured.
-  chunkkey-max-entries: 128 # how many chunks does the player have to see before the oldest chunkkey stored becomes "unique" again?
+  # These values must be tuned to how your server is configured. This default config is roughly tuned for a view distance of 5.
+  chunkkey-max-entries: 128 # how many chunk columns does the player have to see before the oldest chunkkey stored becomes "unique" again?
   block-placed: 0.8
-  block-broken: 0.4
+  block-broken: 0.6
   blockpos-max-entries: 256
   dimension-changed: 1.0
   container-opened: 0.3 # The player has opened a container block in a location that isn't one of the last blockpos-max-entries locations
@@ -20,3 +21,4 @@ events:
   player-died: 10.0 # The player has died in a location that isn't one of the last blockpos-max-entries locations
   player-chatted: 0.0 # I don't recommend using this unless you do a good job at filtering bots.
   player-right-click: 0.2
+  organic-experience-earned: 2.0

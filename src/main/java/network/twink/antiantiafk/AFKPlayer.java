@@ -1,12 +1,14 @@
 package network.twink.antiantiafk;
 
 import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
 import io.papermc.paper.event.packet.PlayerChunkLoadEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import network.twink.antiantiafk.util.BlockPos;
 import org.bukkit.Location;
 import org.bukkit.block.Container;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -44,7 +46,7 @@ public class AFKPlayer implements Listener {
             while (getSecondsBeforeDisconnect() > 0) {
                 if (this.getBukkitPlayer() == null || !this.getBukkitPlayer().isOnline()) return;
                 secondsBeforeDisconnect -= 1f;
-                if (plugin.getWeightedEvents().isDebug()) {
+                if (plugin.getWeightedEventConfig().isDebug()) {
                     getBukkitPlayer().sendPlayerListHeaderAndFooter(Component.text("\n\2474Anti-AntiAFK Debug\n"),
                             Component.text("\n\2477" + AntiAntiAfkPlugin.getFormattedTime(getSecondsBeforeDisconnect()) + "\n"));
                 }
@@ -73,7 +75,7 @@ public class AFKPlayer implements Listener {
     public void kickPlayer() {
         this.interruptThread();
         if (this.getBukkitPlayer() == null || !this.getBukkitPlayer().isOnline()) return; // they're already gone.
-        this.getBukkitPlayer().kick(); // todo kickmsg
+        this.getBukkitPlayer().kick(Component.text(plugin.getWeightedEventConfig().getKickMessage())); // todo kickmsg
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -83,16 +85,16 @@ public class AFKPlayer implements Listener {
             return;
         }
         if (!e.getChunk().isGenerated()) {
-            addSecondsBeforeDisconnect(plugin.getWeightedEvents().getOnNewChunkGenerated());
-            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
+            addSecondsBeforeDisconnect(plugin.getWeightedEventConfig().getOnNewChunkGenerated());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEventConfig().getChunkKeyQueueLength());
         } else if (!chunkKeys.contains(e.getChunk().getChunkKey())) {
-            addSecondsBeforeDisconnect(plugin.getWeightedEvents().getOldChunkLoaded());
-            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
+            addSecondsBeforeDisconnect(plugin.getWeightedEventConfig().getOldChunkLoaded());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEventConfig().getChunkKeyQueueLength());
         } else {
             // we don't want to punish a live player for doing repetitive things, like going back and forth between two structures in their base.
             // this may need tuning.
-            addSecondsBeforeDisconnect(plugin.getWeightedEvents().getSeenChunkLoaded());
-            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEvents().getChunkKeyQueueLength());
+            addSecondsBeforeDisconnect(plugin.getWeightedEventConfig().getSeenChunkLoaded());
+            enqueueChunkKey(e.getChunk().getChunkKey(), this.plugin.getWeightedEventConfig().getChunkKeyQueueLength());
             return;
         }
     }
@@ -103,8 +105,8 @@ public class AFKPlayer implements Listener {
         Location loc = e.getHarvestedBlock().getLocation();
         BlockPos pos = new BlockPos(loc);
         if (!blockPositions.contains(pos)) {
-            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnBlockBreak());
-            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnBlockBreak());
+            enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
         }
     }
 
@@ -114,8 +116,8 @@ public class AFKPlayer implements Listener {
         Location loc = e.getBlockPlaced().getLocation();
         BlockPos pos = new BlockPos(loc);
         if (!blockPositions.contains(pos)) {
-            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnBlockPlace());
-            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnBlockPlace());
+            enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
         }
     }
 
@@ -125,8 +127,8 @@ public class AFKPlayer implements Listener {
         if (e.getInventory().getHolder() instanceof Container container) {
             BlockPos pos = new BlockPos(container.getLocation());
             if (!blockPositions.contains(pos)) {
-                addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnContainerOpen());
-                enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+                addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnContainerOpen());
+                enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
             }
             // do we do anything? to be determined... containers don't normally move around often
             // maybe we should give the player some time under certain circumstances.
@@ -139,8 +141,8 @@ public class AFKPlayer implements Listener {
         if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
         BlockPos pos = new BlockPos(e.getPlayer().getLocation());
         if (!blockPositions.contains(pos)) {
-            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnDeath());
-            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnDeath());
+            enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
         }
     }
 
@@ -150,8 +152,8 @@ public class AFKPlayer implements Listener {
             if (!player.getUniqueId().equals(playerUuid)) return;
             BlockPos pos = new BlockPos(player.getLocation());
             if (!blockPositions.contains(pos)) {
-                addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnElytraEngage());
-                enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+                addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnElytraEngage());
+                enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
             }
         }
     }
@@ -159,14 +161,14 @@ public class AFKPlayer implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFlyFaster(PlayerElytraBoostEvent e) {
         if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
-        addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnElytraBoost());
+        addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnElytraBoost());
     }
 
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerChat(AsyncChatEvent e) {
         if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
-        addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnChat());
+        addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnChat());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -174,14 +176,25 @@ public class AFKPlayer implements Listener {
         if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
         BlockPos pos = new BlockPos(e.getPlayer().getLocation());
         if (!blockPositions.contains(pos)) {
-            addSecondsBeforeDisconnect(this.plugin.getWeightedEvents().getOnPortal());
-            enqueueBlockPos(pos, this.plugin.getWeightedEvents().getBlockPosQueueLength());
+            addSecondsBeforeDisconnect(this.plugin.getWeightedEventConfig().getOnPortal());
+            enqueueBlockPos(pos, this.plugin.getWeightedEventConfig().getBlockPosQueueLength());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onXp(PlayerPickupExperienceEvent e) {
+        if (!e.getPlayer().getUniqueId().equals(playerUuid)) return;
+        for (ExperienceOrb.SpawnReason acceptableExperienceSource : AntiAntiAfkPlugin.ACCEPTABLE_EXPERIENCE_SOURCES) {
+            if (acceptableExperienceSource == e.getExperienceOrb().getSpawnReason()) {
+                addSecondsBeforeDisconnect(e.getExperienceOrb().getExperience() * this.plugin.getWeightedEventConfig().getOnOrganicExperienceEarned());
+                break;
+            }
         }
     }
 
     public float addSecondsBeforeDisconnect(float additionalSeconds) {
         this.secondsBeforeDisconnect += additionalSeconds;
-        this.secondsBeforeDisconnect = Math.min(this.secondsBeforeDisconnect, this.plugin.getWeightedEvents().getMaximumSeconds());
+        this.secondsBeforeDisconnect = Math.min(this.secondsBeforeDisconnect, this.plugin.getWeightedEventConfig().getMaximumSeconds());
         return secondsBeforeDisconnect;
     }
 

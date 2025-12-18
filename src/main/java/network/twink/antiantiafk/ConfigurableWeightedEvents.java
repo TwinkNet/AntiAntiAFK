@@ -19,9 +19,11 @@ public class ConfigurableWeightedEvents {
     public static final String onInteractYamlVal = "player-right-click"; // only in a unique Location
     public static final String blockPosQueueLengthYamlVal = "blockpos-max-entries"; // only in a unique Location
     public static final String chunkKeyQueueLengthYamlVal = "chunkkey-max-entries"; // only in a unique Location
+    public static final String onOrganicExperienceEarnedYamlVal = "organic-experience-earned"; // only in a unique Location
 
 
     private String bypassPermission;
+    private String kickMessage;
     private int initialSeconds;
     private int maximumSeconds;
     private boolean debug;
@@ -39,6 +41,7 @@ public class ConfigurableWeightedEvents {
     private float onDeath; // only in a unique Location
     private float onChat;
     private float onInteract; // only in a unique Location
+    private float onOrganicExperienceEarned; // should help alleviate some timer decay while mining with slow tools, smelting, or villager farming.
     private int blockPosQueueLength; // how many positions should be stored before the oldest position becomes "unique" again?
     private int chunkKeyQueueLength; // how many chunkkeys should be stored before the oldest chunkkey becomes "unique" again?
 
@@ -50,6 +53,7 @@ public class ConfigurableWeightedEvents {
         config = plugin.getConfig();
 
         this.bypassPermission = config.getString("bypass-permission");
+        this.kickMessage = config.getString("kick-message");
         this.initialSeconds = config.getInt("initial-seconds");
         this.maximumSeconds = config.getInt("maximum-seconds");
         this.debug = config.getBoolean("debug");
@@ -66,6 +70,7 @@ public class ConfigurableWeightedEvents {
         this.onDeath = (float) config.getDouble(EVENTS_PREFIX + onDeathYamlVal); //
         this.onChat = (float) config.getDouble(EVENTS_PREFIX + onChatYamlVal); //
         this.onInteract = (float) config.getDouble(EVENTS_PREFIX + onInteractYamlVal); //
+        this.onOrganicExperienceEarned = (float) config.getDouble(EVENTS_PREFIX + onOrganicExperienceEarnedYamlVal); //
         this.blockPosQueueLength = config.getInt(EVENTS_PREFIX + blockPosQueueLengthYamlVal);
         this.chunkKeyQueueLength = config.getInt(EVENTS_PREFIX + chunkKeyQueueLengthYamlVal);
     }
@@ -84,6 +89,10 @@ public class ConfigurableWeightedEvents {
 
     public String getBypassPermission() {
         return bypassPermission;
+    }
+
+    public String getKickMessage() {
+        return kickMessage;
     }
 
     public float getOnNewChunkGenerated() {
@@ -132,6 +141,10 @@ public class ConfigurableWeightedEvents {
 
     public float getOnInteract() {
         return onInteract;
+    }
+
+    public float getOnOrganicExperienceEarned() {
+        return onOrganicExperienceEarned;
     }
 
     public int getBlockPosQueueLength() {

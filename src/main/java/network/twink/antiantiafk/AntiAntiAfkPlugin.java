@@ -3,6 +3,7 @@ package network.twink.antiantiafk;
 import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import io.papermc.paper.event.packet.PlayerChunkLoadEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -14,7 +15,6 @@ import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +27,8 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
     private Map<UUID, AFKPlayer> uuidafkPlayerMap;
     private ConfigurableWeightedEvents weightedEvents;
 
+    public static final ExperienceOrb.SpawnReason[] ACCEPTABLE_EXPERIENCE_SOURCES = new ExperienceOrb.SpawnReason[]{ExperienceOrb.SpawnReason.VILLAGER_TRADE, ExperienceOrb.SpawnReason.BLOCK_BREAK, ExperienceOrb.SpawnReason.GRINDSTONE, ExperienceOrb.SpawnReason.FURNACE};
+
     @Override
     public void onEnable() {
         logger = this.getLogger();
@@ -35,6 +37,7 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
         logger.info("Anti-AntiAFK has loaded its configuration values");
         uuidafkPlayerMap = new HashMap<>();
         for (Player onlinePlayer : this.getServer().getOnlinePlayers()) {
+            if (onlinePlayer.hasPermission(getWeightedEventConfig().getBypassPermission())) continue;
             uuidafkPlayerMap.put(onlinePlayer.getUniqueId(), new AFKPlayer(this, onlinePlayer.getUniqueId(), 1800f)); // add current players, needed if server is reloaded with people online.
             logger.info(onlinePlayer.getName() + " was already online, but they will be treated as if they just joined. A new AFKPlayer instance was created for them.");
         }
@@ -57,6 +60,7 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
+        if (e.getPlayer().hasPermission(getWeightedEventConfig().getBypassPermission())) return;
         AFKPlayer afkPlayer = new AFKPlayer(this, e.getPlayer().getUniqueId(), 1800f);
         uuidafkPlayerMap.put(e.getPlayer().getUniqueId(), afkPlayer);
         this.getServer().getPluginManager().registerEvents(afkPlayer, this);
@@ -65,6 +69,7 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onLeave(PlayerQuitEvent e) {
         var afkPlayer = getAfkPlayer(e.getPlayer());
+        if (afkPlayer == null) return;
         afkPlayer.interruptThread();
         // All events used in AFKPlayer are going to have to be listed here.
         // This is a bit annoying, and I'm not seeing a better way to do this without doing hacky crap.
@@ -95,7 +100,7 @@ public final class AntiAntiAfkPlugin extends JavaPlugin implements Listener {
         return builder.toString();
     }
 
-    public ConfigurableWeightedEvents getWeightedEvents() {
+    public ConfigurableWeightedEvents getWeightedEventConfig() {
         return this.weightedEvents;
     }
 }
