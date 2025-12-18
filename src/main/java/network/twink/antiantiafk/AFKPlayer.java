@@ -75,7 +75,7 @@ public class AFKPlayer implements Listener {
     public void kickPlayer() {
         this.interruptThread();
         if (this.getBukkitPlayer() == null || !this.getBukkitPlayer().isOnline()) return; // they're already gone.
-        this.getBukkitPlayer().kick(Component.text(plugin.getWeightedEventConfig().getKickMessage())); // todo kickmsg
+        this.getBukkitPlayer().kick(Component.text(plugin.getWeightedEventConfig().getKickMessage()));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
