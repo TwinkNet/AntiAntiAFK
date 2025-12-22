@@ -12,3 +12,6 @@ This plugin starts a player that has just connected off with a configurable time
 
 #  Downloads
 https://github.com/TwinkNet/AntiAntiAFK/releases/tag/T.1
+
+# Live Test Server
+Test the plugin by joining `calamitycraft.online`, version 1.21.4. I encourage you to try and break it. Open an issue if you find anything out.
